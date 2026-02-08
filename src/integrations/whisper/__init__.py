@@ -1,0 +1,1 @@
+"""Whisper Transcription Module."""
