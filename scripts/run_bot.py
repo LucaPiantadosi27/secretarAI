@@ -92,9 +92,14 @@ async def main():
         return
     
     # Test LLM connection
-    if not await test_llm_connection():
-        logger.error("Failed to connect to LLM. Check your API keys.")
-        return
+    try:
+        success = await test_llm_connection()
+        if not success:
+            logger.warning("⚠️ LLM connection test failed. Bot will start, but AI features may be unavailable.")
+            # We continue anyway to allow Google Auth to proceed
+    except Exception as e:
+        logger.error(f"Unexpected error during LLM startup check: {e}")
+        # Continue anyway
     
     logger.info("-" * 50)
     logger.info("All systems ready. Starting bot...")

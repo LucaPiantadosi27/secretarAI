@@ -59,11 +59,42 @@ class GeminiClient(BaseLLMClient):
                     role="system",
                     parts=[types.Part.from_text(text=msg.content)]
                 )
+            elif msg.role == "tool":
+                # Handle tool response
+                # google-genai expects function_response part
+                function_response = types.FunctionResponse(
+                    name=msg.name,
+                    response={"result": msg.content} 
+                )
+                contents.append(types.Content(
+                    role="tool",
+                    parts=[types.Part.from_function_response(
+                        name=msg.name,
+                        response={"result": msg.content}
+                    )]
+                ))
+            elif msg.role == "assistant" and msg.tool_calls:
+                # Handle assistant tool call
+                parts = []
+                if msg.content:
+                    parts.append(types.Part.from_text(text=msg.content))
+                
+                for tc in msg.tool_calls:
+                    parts.append(types.Part.from_function_call(
+                        name=tc.name,
+                        args=tc.arguments
+                    ))
+                
+                contents.append(types.Content(
+                    role="model",
+                    parts=parts
+                ))
             else:
+                # Standard text message
                 role = "user" if msg.role == "user" else "model"
                 contents.append(types.Content(
                     role=role,
-                    parts=[types.Part.from_text(text=msg.content)]
+                    parts=[types.Part.from_text(text=msg.content or "")]
                 ))
         
         return contents, system_instruction
@@ -107,16 +138,27 @@ class GeminiClient(BaseLLMClient):
         )
         
         try:
-            response = await self.client.aio.models.generate_content(
-                model=self.model_name,
-                contents=contents,
-                config=config,
+            from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+            from google.genai.errors import ClientError
+
+            @retry(
+                retry=retry_if_exception_type(ClientError),
+                stop=stop_after_attempt(5),
+                wait=wait_exponential(multiplier=2, min=5, max=20)
             )
+            async def generate_with_retry():
+                return await self.client.aio.models.generate_content(
+                    model=self.model_name,
+                    contents=contents,
+                    config=config,
+                )
+
+            response = await generate_with_retry()
             
             return self._parse_response(response)
             
         except Exception as e:
-            logger.error(f"Gemini API error: {e}")
+            logger.error(f"Gemini API error after retries: {e}")
             raise
 
     async def chat_with_vision(

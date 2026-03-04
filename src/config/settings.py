@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     # Telegram
     telegram_bot_token: str = Field(default="")
     telegram_webhook_url: str = Field(default="")
+    allowed_user_ids: list[int] = Field(default_factory=list)
     
     # Google OAuth
     google_client_id: str = Field(default="")

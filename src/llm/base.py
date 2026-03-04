@@ -5,17 +5,20 @@ from typing import Any
 from pydantic import BaseModel
 
 
-class Message(BaseModel):
-    """Chat message structure."""
-    role: str  # "user" | "assistant" | "system"
-    content: str
-
-
 class ToolCall(BaseModel):
     """Tool/function call request from LLM."""
     id: str
     name: str
     arguments: dict[str, Any]
+
+
+class Message(BaseModel):
+    """Chat message structure."""
+    role: str  # "user" | "assistant" | "system" | "tool"
+    content: str | None = None
+    tool_calls: list[ToolCall] | None = None
+    tool_call_id: str | None = None  # For tool responses
+    name: str | None = None  # For tool responses
 
 
 class LLMResponse(BaseModel):
@@ -25,8 +28,6 @@ class LLMResponse(BaseModel):
     finish_reason: str | None = None
     raw_response: Any = None  # Provider-specific response for debugging
 
-    class Config:
-        arbitrary_types_allowed = True
 
 
 class BaseLLMClient(ABC):

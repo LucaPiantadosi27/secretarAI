@@ -3,11 +3,19 @@
 import logging
 from typing import Any
 
-from src.llm import get_llm_client, Message, LLMResponse, ToolCall
-from src.llm.base import BaseLLMClient
+from src.llm import BaseLLMClient, Message, ToolCall
+from src.llm.factory import get_llm_client
 from .system_prompt import EXECUTIVE_ASSISTANT_PROMPT, TOOL_DEFINITIONS
 
 logger = logging.getLogger(__name__)
+
+# Integration Clients
+try:
+    from src.integrations.google_client import GoogleWorkspaceClient
+    GOOGLE_CLIENT = GoogleWorkspaceClient()
+except Exception as e:
+    logger.error(f"Failed to initialize Google Client: {e}")
+    GOOGLE_CLIENT = None
 
 
 class BrainOrchestrator:
@@ -25,6 +33,14 @@ class BrainOrchestrator:
         self.conversation_history: list[Message] = []
         self.tool_handlers: dict[str, callable] = {}
         
+        # Register tool handlers
+        self.register_tool_handler("get_calendar_events", self._handle_get_calendar)
+        self.register_tool_handler("create_calendar_event", self._handle_create_event)
+        
+        # Placeholders for others
+        for tool_name in ["create_document", "set_location_reminder", "remember", "recall"]:
+             self.register_tool_handler(tool_name, self._default_tool_handler)
+        
         logger.info(f"Brain initialized with provider: {self.llm.provider_name}")
     
     def register_tool_handler(self, tool_name: str, handler: callable):
@@ -36,6 +52,30 @@ class BrainOrchestrator:
         """
         self.tool_handlers[tool_name] = handler
         logger.debug(f"Registered handler for tool: {tool_name}")
+    
+    async def _handle_get_calendar(self, **kwargs):
+        """Handle get_calendar_events tool."""
+        if not GOOGLE_CLIENT:
+            return "Errore: Google Workspace non configurato."
+        
+        days = kwargs.get("days", 3)
+        return GOOGLE_CLIENT.list_calendar_events(days=int(days))
+
+    async def _handle_create_event(self, **kwargs):
+        """Handle create_calendar_event tool."""
+        if not GOOGLE_CLIENT:
+            return "Errore: Google Workspace non configurato."
+            
+        summary = kwargs.get("summary")
+        start_time = kwargs.get("start_time")
+        end_time = kwargs.get("end_time")
+        description = kwargs.get("description", "")
+        
+        return GOOGLE_CLIENT.create_calendar_event(summary, start_time, end_time, description)
+
+    async def _default_tool_handler(self, **kwargs):
+        """Default handler for unimplemented tools."""
+        return "Funzionalità non ancora implementata nel sistema reale."
     
     async def process_message(
         self,
@@ -60,22 +100,42 @@ class BrainOrchestrator:
         system_prompt = self._build_system_prompt(user_context)
         
         # Call LLM
-        response = await self.llm.chat(
-            messages=self.conversation_history,
-            tools=TOOL_DEFINITIONS,
-            system_prompt=system_prompt,
-        )
+        try:
+            response = await self.llm.chat(
+                messages=self.conversation_history,
+                tools=TOOL_DEFINITIONS,
+                system_prompt=system_prompt,
+            )
+        except Exception as e:
+            logger.error(f"LLM Chat Error: {e}")
+            
+            # Unwrap tenacity RetryError
+            import tenacity
+            if isinstance(e, tenacity.RetryError):
+                e = e.last_attempt.exception()
+            
+            error_msg = str(e)
+            if "429" in error_msg or "Resource exhausted" in error_msg:
+                return "⚠️ Sono un po' sovraccarica (Limite API Gemini). Riprova tra un attimo."
+            return f"⚠️ Errore AI: {type(e).__name__} - {error_msg}"
         
         # Handle tool calls if present
         if response.tool_calls:
+            # Add the assistant's tool call message to history
+            self.conversation_history.append(
+                Message(
+                    role="assistant",
+                    content=response.content,
+                    tool_calls=response.tool_calls
+                )
+            )
             final_response = await self._handle_tool_calls(response)
         else:
             final_response = response.content or "Mi scusi, non ho capito. Può ripetere?"
-        
-        # Add assistant response to history
-        self.conversation_history.append(
-            Message(role="assistant", content=final_response)
-        )
+            # Add assistant response to history
+            self.conversation_history.append(
+                Message(role="assistant", content=final_response)
+            )
         
         return final_response
     
@@ -113,17 +173,34 @@ class BrainOrchestrator:
             })
         
         # Send tool results back to LLM for final response
-        tool_response_msg = Message(
-            role="user",
-            content=f"Risultati degli strumenti: {tool_results}"
+        # Create a Tool Message for each result
+        for tool_result in tool_results:
+            self.conversation_history.append(
+                Message(
+                    role="tool",
+                    tool_call_id=tool_result["tool"], # Gemini uses function name as ID often, or we generate one
+                    name=tool_result["tool"],
+                    content=str(tool_result["result"])
+                )
+            )
+            
+        try:    
+            final_response_obj = await self.llm.chat(
+                messages=self.conversation_history,
+                system_prompt=EXECUTIVE_ASSISTANT_PROMPT,
+            )
+        except Exception as e:
+            logger.error(f"LLM Tool Loop Error: {e}")
+            if "429" in str(e):
+                return "⚠️ Ho eseguito l'azione, ma non riesco a generare la risposta finale (Limite API). Controlla il calendario!"
+            raise e
+        
+        # Add final response to history
+        self.conversation_history.append(
+            Message(role="assistant", content=final_response_obj.content)
         )
         
-        final_response = await self.llm.chat(
-            messages=self.conversation_history + [tool_response_msg],
-            system_prompt=EXECUTIVE_ASSISTANT_PROMPT,
-        )
-        
-        return final_response.content or "Operazione completata."
+        return final_response_obj.content or "Operazione completata."
     
     async def _execute_tool(self, tool_call: ToolCall) -> Any:
         """Execute a single tool call.

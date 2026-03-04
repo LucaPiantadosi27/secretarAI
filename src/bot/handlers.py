@@ -38,6 +38,14 @@ class BotHandlers:
                           "create_document", "set_location_reminder",
                           "remember", "recall"]:
             self.brain.register_tool_handler(tool_name, placeholder_handler)
+
+    def _is_authorized(self, user_id: int) -> bool:
+        """Check if a user is authorized to use the bot."""
+        if not settings.allowed_user_ids:
+            # If no allowed users defined, allow everyone (default behavior for testing)
+            # PRO TIP: You SHOULD set this in .env for security!
+            return True
+        return user_id in settings.allowed_user_ids
     
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /start command."""
@@ -77,8 +85,13 @@ Scrivimi cosa ti serve o inviami un messaggio vocale!"""
     
     async def handle_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle text messages."""
-        user_message = update.message.text
         user_id = update.effective_user.id
+        
+        if not self._is_authorized(user_id):
+            await update.message.reply_text("⛔ Mi dispiace, ma non sei autorizzato a usare questo bot.")
+            return
+
+        user_message = update.message.text
         
         logger.info(f"Text from {user_id}: {user_message[:50]}...")
         
@@ -105,6 +118,11 @@ Scrivimi cosa ti serve o inviami un messaggio vocale!"""
     async def handle_voice(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle voice messages."""
         user_id = update.effective_user.id
+        
+        if not self._is_authorized(user_id):
+            await update.message.reply_text("⛔ Accesso vocale negato.")
+            return
+
         logger.info(f"Voice message from {user_id}")
         
         await update.message.reply_text("🎤 Sto trascrivendo il messaggio vocale...")
@@ -142,6 +160,11 @@ Scrivimi cosa ti serve o inviami un messaggio vocale!"""
     async def handle_location(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle location updates."""
         user_id = update.effective_user.id
+        
+        if not self._is_authorized(user_id):
+            # Silently ignore location from unauthorized users
+            return
+
         location = update.message.location
         
         logger.info(f"Location from {user_id}: {location.latitude}, {location.longitude}")

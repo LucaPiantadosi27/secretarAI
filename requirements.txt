@@ -4,8 +4,12 @@
 # Telegram Bot
 python-telegram-bot>=21.0
 
-# LLM Clients (Native)
-google-generativeai>=0.8.0
+# LLM Clients# Google APIs
+google-generativeai
+google-genai
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib>=0.8.0
 anthropic>=0.40.0
 
 # Google Workspace
@@ -19,6 +23,9 @@ openai>=1.50.0
 pydantic>=2.9.0
 pydantic-settings>=2.5.0
 python-dotenv>=1.0.1
+
+# Utils
+tenacity
 
 # Database
 sqlalchemy>=2.0.35
