@@ -45,7 +45,8 @@ class TestLLMFactory:
             mock_settings.llm_provider = LLMProvider.GEMINI
             mock_settings.gemini_api_key = "test-key"
             
-            with patch("src.llm.factory.GeminiClient") as mock_client:
+            # Factory uses a local import, so patch the class in its own module
+            with patch("src.llm.gemini_client.GeminiClient") as mock_client:
                 mock_client.return_value = MagicMock()
                 
                 client = get_llm_client()
@@ -58,7 +59,8 @@ class TestLLMFactory:
             mock_settings.llm_provider = LLMProvider.CLAUDE
             mock_settings.anthropic_api_key = "test-key"
             
-            with patch("src.llm.factory.ClaudeClient") as mock_client:
+            # Factory uses a local import, so patch the class in its own module
+            with patch("src.llm.claude_client.ClaudeClient") as mock_client:
                 mock_client.return_value = MagicMock()
                 
                 client = get_llm_client()

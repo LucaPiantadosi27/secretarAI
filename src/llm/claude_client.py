@@ -45,6 +45,16 @@ class ClaudeClient(BaseLLMClient):
         for msg in messages:
             if msg.role == "system":
                 system_prompt = msg.content
+            elif msg.role == "tool":
+                # Claude requires tool results as user messages with a tool_result block
+                claude_messages.append({
+                    "role": "user",
+                    "content": [{
+                        "type": "tool_result",
+                        "tool_use_id": msg.tool_call_id or msg.name or "",
+                        "content": msg.content or "",
+                    }],
+                })
             else:
                 claude_messages.append({
                     "role": msg.role,

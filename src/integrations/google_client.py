@@ -14,7 +14,11 @@ from googleapiclient.discovery import build
 logger = logging.getLogger(__name__)
 
 # If modifying these scopes, delete the file token.json.
-SCOPES = ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.com/auth/drive.readonly']
+SCOPES = [
+    'https://www.googleapis.com/auth/calendar',
+    'https://www.googleapis.com/auth/drive.file',   # Read/write files created by this app
+    'https://www.googleapis.com/auth/documents',    # Create and edit Google Docs
+]
 
 class GoogleWorkspaceClient:
     """Client for interacting with Google Workspace APIs (Calendar, Drive)."""
@@ -25,6 +29,7 @@ class GoogleWorkspaceClient:
         self.creds = None
         self.service_calendar = None
         self.service_drive = None
+        self.service_docs = None
         
         self._authenticate()
 
@@ -38,6 +43,10 @@ class GoogleWorkspaceClient:
             if self.creds and self.creds.expired and self.creds.refresh_token:
                 try:
                     self.creds.refresh(Request())
+                    # Save the refreshed credentials for the next run
+                    with open(self.token_path, 'w') as token:
+                        token.write(self.creds.to_json())
+                    logger.info("Successfully refreshed and saved Google API token")
                 except Exception as e:
                     logger.warning(f"Failed to refresh token: {e}")
                     self.creds = None
@@ -67,6 +76,7 @@ class GoogleWorkspaceClient:
             try:
                 self.service_calendar = build('calendar', 'v3', credentials=self.creds)
                 self.service_drive = build('drive', 'v3', credentials=self.creds)
+                self.service_docs = build('docs', 'v1', credentials=self.creds)
                 logger.info("Google Workspace services initialized successfully")
             except Exception as e:
                 logger.error(f"Failed to build services: {e}")
@@ -144,3 +154,162 @@ class GoogleWorkspaceClient:
         except Exception as e:
             logger.error(f"Calendar Create Error: {e}")
             return f"Errore nella creazione evento: {str(e)}"
+
+    # -------------------------------------------------------------------------
+    # Google Drive / Docs
+    # -------------------------------------------------------------------------
+
+    def create_document(self, title: str, content: str, folder_name: str | None = None) -> str:
+        """Create a Google Doc with the given title and content.
+
+        Args:
+            title: Document title.
+            content: Plain-text content to write into the document.
+            folder_name: Optional Drive folder name to place the doc in.
+
+        Returns:
+            A user-friendly string with the document link.
+        """
+        if not self.service_docs or not self.service_drive:
+            return "Errore: servizi Google Drive/Docs non disponibili."
+
+        try:
+            # 1. Create an empty Google Doc
+            doc_body = {'title': title}
+            doc = self.service_docs.documents().create(body=doc_body).execute()
+            doc_id = doc.get('documentId')
+
+            # 2. Insert the content
+            if content:
+                requests = [{
+                    'insertText': {
+                        'location': {'index': 1},
+                        'text': content
+                    }
+                }]
+                self.service_docs.documents().batchUpdate(
+                    documentId=doc_id, body={'requests': requests}
+                ).execute()
+
+            # 3. Move to folder if requested
+            if folder_name:
+                folder_id = self._get_or_create_folder(folder_name)
+                if folder_id:
+                    self.service_drive.files().update(
+                        fileId=doc_id,
+                        addParents=folder_id,
+                        removeParents='root',
+                        fields='id, parents'
+                    ).execute()
+
+            doc_url = f"https://docs.google.com/document/d/{doc_id}/edit"
+            logger.info(f"Document created: {doc_id}")
+            return f"✅ Documento creato: **{title}**\n🔗 {doc_url}"
+
+        except Exception as e:
+            logger.error(f"Drive create_document error: {e}")
+            return f"Errore nella creazione del documento: {str(e)}"
+
+    def search_drive_files(self, query: str, max_results: int = 10) -> str:
+        """Search for files in Google Drive.
+
+        Args:
+            query: Search term (file name or keyword).
+            max_results: Maximum number of results to return.
+
+        Returns:
+            A formatted string listing matching files.
+        """
+        if not self.service_drive:
+            return "Errore: servizio Google Drive non disponibile."
+
+        try:
+            # Search in name and full-text
+            q = f"name contains '{query}' and trashed = false"
+            results = self.service_drive.files().list(
+                q=q,
+                pageSize=max_results,
+                fields="files(id, name, mimeType, modifiedTime, webViewLink)"
+            ).execute()
+
+            files = results.get('files', [])
+
+            if not files:
+                return f"📂 Nessun file trovato per '{query}' su Google Drive."
+
+            _MIME_ICONS = {
+                'application/vnd.google-apps.document': '📄',
+                'application/vnd.google-apps.spreadsheet': '📊',
+                'application/vnd.google-apps.presentation': '📑',
+                'application/vnd.google-apps.folder': '📁',
+                'application/pdf': '📋',
+            }
+
+            lines = [f"📂 **File trovati per '{query}':**"]
+            for f in files:
+                icon = _MIME_ICONS.get(f.get('mimeType', ''), '📎')
+                link = f.get('webViewLink', '')
+                name = f.get('name', 'Senza titolo')
+                lines.append(f"{icon} [{name}]({link})")
+
+            return "\n".join(lines)
+
+        except Exception as e:
+            logger.error(f"Drive search error: {e}")
+            return f"Errore nella ricerca Drive: {str(e)}"
+
+    def get_document_content(self, doc_id: str) -> str:
+        """Retrieve the plain text content of a Google Doc.
+
+        Args:
+            doc_id: Google Doc document ID.
+
+        Returns:
+            Plain-text content of the document.
+        """
+        if not self.service_docs:
+            return "Errore: servizio Google Docs non disponibile."
+
+        try:
+            doc = self.service_docs.documents().get(documentId=doc_id).execute()
+            title = doc.get('title', 'Documento senza titolo')
+
+            # Extract plain text from body elements
+            text_parts = []
+            body = doc.get('body', {})
+            for element in body.get('content', []):
+                para = element.get('paragraph')
+                if para:
+                    for elem in para.get('elements', []):
+                        text_run = elem.get('textRun')
+                        if text_run:
+                            text_parts.append(text_run.get('content', ''))
+
+            full_text = ''.join(text_parts).strip()
+            return f"📄 **{title}**\n\n{full_text}"
+
+        except Exception as e:
+            logger.error(f"Docs get_content error: {e}")
+            return f"Errore nel recupero documento: {str(e)}"
+
+    def _get_or_create_folder(self, folder_name: str) -> str | None:
+        """Get folder ID by name, or create it if it doesn't exist."""
+        try:
+            q = f"name = '{folder_name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
+            results = self.service_drive.files().list(q=q, fields="files(id)").execute()
+            folders = results.get('files', [])
+
+            if folders:
+                return folders[0]['id']
+
+            # Create the folder
+            folder_meta = {
+                'name': folder_name,
+                'mimeType': 'application/vnd.google-apps.folder'
+            }
+            folder = self.service_drive.files().create(body=folder_meta, fields='id').execute()
+            return folder.get('id')
+
+        except Exception as e:
+            logger.warning(f"Could not get/create folder '{folder_name}': {e}")
+            return None

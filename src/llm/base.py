@@ -10,6 +10,7 @@ class ToolCall(BaseModel):
     id: str
     name: str
     arguments: dict[str, Any]
+    metadata: dict[str, Any] = {}  # Provider-specific metadata (e.g. Gemini thought signatures)
 
 
 class Message(BaseModel):

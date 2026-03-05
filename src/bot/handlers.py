@@ -26,18 +26,6 @@ class BotHandlers:
     def __init__(self):
         """Initialize handlers with Brain orchestrator."""
         self.brain = BrainOrchestrator()
-        self._register_default_tools()
-    
-    def _register_default_tools(self):
-        """Register placeholder tool handlers."""
-        # These will be replaced with real implementations
-        async def placeholder_handler(**kwargs):
-            return {"status": "Tool non ancora implementato", "args": kwargs}
-        
-        for tool_name in ["get_calendar_events", "create_calendar_event", 
-                          "create_document", "set_location_reminder",
-                          "remember", "recall"]:
-            self.brain.register_tool_handler(tool_name, placeholder_handler)
 
     def _is_authorized(self, user_id: int) -> bool:
         """Check if a user is authorized to use the bot."""

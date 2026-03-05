@@ -83,7 +83,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "create_document",
-        "description": "Crea un nuovo Google Doc",
+        "description": "Crea un nuovo Google Doc con titolo e contenuto specificati",
         "parameters": {
             "type": "object",
             "properties": {
@@ -97,10 +97,43 @@ TOOL_DEFINITIONS = [
                 },
                 "folder_name": {
                     "type": "string",
-                    "description": "Nome della cartella dove salvare (opzionale)"
+                    "description": "Nome della cartella Drive dove salvare (opzionale)"
                 }
             },
             "required": ["title", "content"]
+        }
+    },
+    {
+        "name": "search_drive_files",
+        "description": "Cerca file nel Google Drive dell'utente per nome o parola chiave",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Termine di ricerca (nome file o parola chiave)"
+                },
+                "max_results": {
+                    "type": "integer",
+                    "description": "Numero massimo di risultati (default: 10)",
+                    "default": 10
+                }
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "get_document_content",
+        "description": "Recupera il contenuto testuale di un Google Doc tramite il suo ID",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "doc_id": {
+                    "type": "string",
+                    "description": "ID del documento Google (dalla URL: /document/d/DOC_ID/edit)"
+                }
+            },
+            "required": ["doc_id"]
         }
     },
     {
