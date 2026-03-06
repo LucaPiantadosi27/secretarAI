@@ -6,7 +6,16 @@ from typing import Any
 
 from src.llm import BaseLLMClient, Message, ToolCall, LLMResponse
 from src.llm.factory import get_llm_client
-from .system_prompt import EXECUTIVE_ASSISTANT_PROMPT, TOOL_DEFINITIONS
+from .system_prompt import EXECUTIVE_ASSISTANT_PROMPT
+
+# Core modular imports
+from src.core.event_bus import bus, EventType, Event
+from src.core.tools import registry, load_tools_from_directory
+from src.memory.memory_store import store as memory_store
+from src.documents.document_store import doc_store
+from src.memory.memory_manager import MemoryManager
+import os
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -18,12 +27,7 @@ MAX_HISTORY_MESSAGES = 20
 MAX_TOOL_ITERATIONS = 5
 
 # Integration Clients
-try:
-    from src.integrations.google_client import GoogleWorkspaceClient
-    GOOGLE_CLIENT = GoogleWorkspaceClient()
-except Exception as e:
-    logger.error(f"Failed to initialize Google Client: {e}")
-    GOOGLE_CLIENT = None
+from src.integrations.google_client import GOOGLE_CLIENT
 
 
 class BrainOrchestrator:
@@ -36,33 +40,67 @@ class BrainOrchestrator:
     """
     
     def __init__(self):
-        """Initialize the Brain with the configured LLM client."""
+        """Initialize the Brain with the configured LLM client and modular systems."""
         self.llm: BaseLLMClient = get_llm_client()
         self.conversation_history: list[Message] = []
-        self.tool_handlers: dict[str, callable] = {}
         
-        # Register tool handlers
-        self.register_tool_handler("get_calendar_events", self._handle_get_calendar)
-        self.register_tool_handler("create_calendar_event", self._handle_create_event)
-        self.register_tool_handler("create_document", self._handle_create_document)
-        self.register_tool_handler("search_drive_files", self._handle_search_drive)
-        self.register_tool_handler("get_document_content", self._handle_get_document_content)
-
-        # Placeholders for tools not yet implemented
-        for tool_name in ["set_location_reminder", "remember", "recall"]:
-             self.register_tool_handler(tool_name, self._default_tool_handler)
+        # Initialize Memory Manager
+        self.memory_manager = MemoryManager(memory_store, self.llm)
+        self.seen_emails = set() # For proactive notifications
         
+        # Initialize Tools (Ensure they are loaded)
+        tools_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'core', 'tools')
+        load_tools_from_directory(tools_dir)
+        
+        # We don't need manual tool_handlers dict anymore, we use the registry directly.
+        
+        # Async initialization setup
+        self._init_task = asyncio.create_task(self._async_init())
         logger.info(f"Brain initialized with provider: {self.llm.provider_name}")
-    
-    def register_tool_handler(self, tool_name: str, handler: callable):
-        """Register a handler function for a tool.
         
-        Args:
-            tool_name: Name matching a tool in TOOL_DEFINITIONS
-            handler: Async callable that executes the tool
-        """
-        self.tool_handlers[tool_name] = handler
-        logger.debug(f"Registered handler for tool: {tool_name}")
+    async def _async_init(self):
+        """Initialize async components like DB and EventBus worker."""
+        await memory_store.initialize()
+        await doc_store.initialize()
+        await bus.start()
+        await bus.emit(Event(type=EventType.SYSTEM_STARTUP, payload={"provider": self.llm.provider_name}))
+        
+        # Start proactive email polling (DISABLED to save quota - reader only on demand)
+        # asyncio.create_task(self._poll_emails())
+
+    async def _poll_emails(self):
+        """Periodically check for NEW unread emails and emit events."""
+        logger.info("Email polling background task started")
+        
+        while True:
+            try:
+                if GOOGLE_CLIENT:
+                    # Check for unread emails 
+                    emails = GOOGLE_CLIENT.list_emails(max_results=5, query="is:unread")
+                    for email in emails:
+                        if email['id'] not in self.seen_emails:
+                            self.seen_emails.add(email['id'])
+                            await bus.emit(Event(
+                                type=EventType.EMAIL_RECEIVED,
+                                payload={
+                                    "id": email['id'],
+                                    "from": email['from'],
+                                    "subject": email['subject'],
+                                    "snippet": email['snippet']
+                                }
+                            ))
+                            logger.info(f"New email detected: {email['subject']}")
+                
+                # Cleanup seen_emails to avoid memory leak (keep last 100)
+                if len(self.seen_emails) > 100:
+                    email_list = list(self.seen_emails)
+                    self.seen_emails = set(email_list[-100:])
+                    
+            except Exception as e:
+                logger.debug(f"Email polling error: {e}")
+                
+            await asyncio.sleep(300) # Poll every 5 minutes
+
     
     async def _handle_get_calendar(self, **kwargs):
         """Handle get_calendar_events tool."""
@@ -127,10 +165,30 @@ class BrainOrchestrator:
         user_context: dict | None = None,
     ) -> str:
         """Process a user message and return the AI response."""
+        # Ensure async init is done
+        if hasattr(self, '_init_task') and not self._init_task.done():
+            await self._init_task
+            
+        await bus.emit(Event(EventType.MESSAGE_RECEIVED, {"message": user_message}))
+        
         try:
-            return await self._process_message_internal(user_message, user_context)
+            response = await self._process_message_internal(user_message, user_context)
+            
+            # Post-processing: Extract new memories asynchronously only if it's a meaningful interaction
+            is_long_msg = len(user_message) > 15
+            is_long_conv = len(self.conversation_history) > 4
+            
+            if is_long_msg or is_long_conv:
+                asyncio.create_task(self.memory_manager.extract_and_store(self.conversation_history))
+            else:
+                logger.debug("Skipping memory extraction for short/initial interaction to save quota.")
+            
+            await bus.emit(Event(EventType.MESSAGE_PROCESSED, {"response": response[:100]}))
+            return response
+            
         except Exception as e:
             logger.error(f"Global Brain Error: {e}")
+            await bus.emit(Event(EventType.TOOL_ERROR, {"error": str(e)}))
             
             # Unwrap tenacity RetryError
             if isinstance(e, tenacity.RetryError):
@@ -165,13 +223,17 @@ class BrainOrchestrator:
         logger.debug(f"History length before LLM call: {len(self.conversation_history)} messages")
 
         # Build context-aware system prompt
-        system_prompt = self._build_system_prompt(user_context)
+        recent_memory_context = await self.memory_manager.get_relevant_context(user_message)
+        system_prompt = self._build_system_prompt(user_context, recent_memory_context)
+
+        # Get dynamic tools from registry
+        current_tools = registry.get_all_definitions()
 
         # Agentic tool-call loop with a hard cap to prevent infinite iteration
         for iteration in range(MAX_TOOL_ITERATIONS):
             response = await self.llm.chat(
                 messages=self.conversation_history,
-                tools=TOOL_DEFINITIONS,
+                tools=current_tools,
                 system_prompt=system_prompt,
             )
 
@@ -198,10 +260,13 @@ class BrainOrchestrator:
         logger.warning(f"Reached MAX_TOOL_ITERATIONS ({MAX_TOOL_ITERATIONS}) — forcing stop.")
         return "Mi scusi, ho impiegato troppi passi per rispondere. Può riformulare la richiesta?"
     
-    def _build_system_prompt(self, context: dict | None) -> str:
-        """Build system prompt with optional context."""
+    def _build_system_prompt(self, context: dict | None, memory_context: str = "") -> str:
+        """Build system prompt with optional context and memories."""
         prompt = EXECUTIVE_ASSISTANT_PROMPT
         
+        if memory_context:
+            prompt += f"\n\n{memory_context}"
+            
         if context:
             prompt += "\n\n## Contesto Attuale\n"
             if "location" in context:
@@ -227,27 +292,26 @@ class BrainOrchestrator:
             )
     
     async def _execute_tool(self, tool_call: ToolCall) -> Any:
-        """Execute a single tool call.
+        """Execute a single tool call."""
+        tool = registry.get_tool(tool_call.name)
         
-        Args:
-            tool_call: The tool call to execute
-            
-        Returns:
-            Tool execution result
-        """
-        handler = self.tool_handlers.get(tool_call.name)
+        kwargs = tool_call.arguments
+        await bus.emit(Event(EventType.TOOL_START, {"tool": tool_call.name, "args": kwargs}))
         
-        if handler is None:
-            logger.warning(f"No handler for tool: {tool_call.name}")
-            return {"error": f"Tool '{tool_call.name}' non disponibile"}
-        
-        try:
-            result = await handler(**tool_call.arguments)
-            logger.info(f"Tool '{tool_call.name}' executed successfully")
-            return result
-        except Exception as e:
-            logger.error(f"Tool execution failed: {e}")
-            return {"error": str(e)}
+        if tool:
+            try:
+                result = await tool.execute(**kwargs)
+                logger.info(f"Tool '{tool_call.name}' executed successfully")
+                await bus.emit(Event(EventType.TOOL_END, {"tool": tool_call.name, "status": "success"}))
+                return result
+            except Exception as e:
+                logger.error(f"Tool {tool_call.name} execution failed: {e}")
+                await bus.emit(Event(EventType.TOOL_ERROR, {"tool": tool_call.name, "error": str(e)}))
+                return {"error": str(e)}
+        else:
+            # Fallback for tools not yet migrated (like set_location_reminder)
+            logger.warning(f"No handler found for tool: {tool_call.name}")
+            return {"error": f"Tool '{tool_call.name}' non ancora implementato o non caricato"}
     
     def clear_history(self):
         """Clear conversation history."""

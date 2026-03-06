@@ -18,6 +18,8 @@ SCOPES = [
     'https://www.googleapis.com/auth/calendar',
     'https://www.googleapis.com/auth/drive.file',   # Read/write files created by this app
     'https://www.googleapis.com/auth/documents',    # Create and edit Google Docs
+    'https://www.googleapis.com/auth/gmail.modify', # Read, list, and modify emails
+    'https://www.googleapis.com/auth/gmail.send',   # Send emails
 ]
 
 class GoogleWorkspaceClient:
@@ -30,6 +32,7 @@ class GoogleWorkspaceClient:
         self.service_calendar = None
         self.service_drive = None
         self.service_docs = None
+        self.service_gmail = None
         
         self._authenticate()
 
@@ -77,6 +80,7 @@ class GoogleWorkspaceClient:
                 self.service_calendar = build('calendar', 'v3', credentials=self.creds)
                 self.service_drive = build('drive', 'v3', credentials=self.creds)
                 self.service_docs = build('docs', 'v1', credentials=self.creds)
+                self.service_gmail = build('gmail', 'v1', credentials=self.creds)
                 logger.info("Google Workspace services initialized successfully")
             except Exception as e:
                 logger.error(f"Failed to build services: {e}")
@@ -313,3 +317,135 @@ class GoogleWorkspaceClient:
         except Exception as e:
             logger.warning(f"Could not get/create folder '{folder_name}': {e}")
             return None
+
+    # -------------------------------------------------------------------------
+    # Gmail
+    # -------------------------------------------------------------------------
+
+    def list_emails(self, max_results: int = 10, query: str = "label:INBOX") -> List[dict]:
+        """List recent emails from Gmail.
+        
+        Args:
+            max_results: Max number of messages to return.
+            query: Gmail search query (e.g. 'label:INBOX', 'is:unread').
+        """
+        if not self.service_gmail:
+            logger.error("Gmail service not available")
+            return []
+
+        try:
+            results = self.service_gmail.users().messages().list(
+                userId='me', q=query, maxResults=max_results
+            ).execute()
+            
+            messages = results.get('messages', [])
+            email_details = []
+            
+            for msg in messages:
+                detail = self.get_email_details(msg['id'])
+                if detail:
+                    email_details.append(detail)
+                    
+            return email_details
+
+        except Exception as e:
+            logger.error(f"Gmail list error: {e}")
+            return []
+
+    def get_email_details(self, message_id: str) -> Optional[dict]:
+        """Get full details of a specific email."""
+        if not self.service_gmail:
+            return None
+
+        try:
+            msg = self.service_gmail.users().messages().get(
+                userId='me', id=message_id, format='full'
+            ).execute()
+            
+            payload = msg.get('payload', {})
+            headers = payload.get('headers', [])
+            
+            subject = ""
+            sender = ""
+            date = ""
+            
+            for header in headers:
+                if header['name'] == 'Subject':
+                    subject = header['value']
+                elif header['name'] == 'From':
+                    sender = header['value']
+                elif header['name'] == 'Date':
+                    date = header['value']
+
+            # Basic snippet
+            snippet = msg.get('snippet', '')
+            
+            # Extract plain text body if possible
+            body = self._extract_email_body(payload)
+            
+            return {
+                'id': message_id,
+                'threadId': msg.get('threadId'),
+                'subject': subject,
+                'from': sender,
+                'date': date,
+                'snippet': snippet,
+                'body': body or snippet
+            }
+
+        except Exception as e:
+            logger.error(f"Gmail get error for {message_id}: {e}")
+            return None
+
+    def _extract_email_body(self, payload: dict) -> str:
+        """Helper to recursively extract plain text body from email payload."""
+        if 'parts' in payload:
+            for part in payload['parts']:
+                body = self._extract_email_body(part)
+                if body:
+                    return body
+        
+        if payload.get('mimeType') == 'text/plain':
+            import base64
+            data = payload.get('body', {}).get('data', '')
+            if data:
+                return base64.urlsafe_b64decode(data).decode('utf-8')
+        
+        return ""
+
+    def send_email(self, to: str, subject: str, body: str, thread_id: Optional[str] = None) -> str:
+        """Send an email."""
+        if not self.service_gmail:
+            return "Errore: servizio Gmail non disponibile."
+
+        try:
+            import base64
+            from email.mime.text import MIMEText
+            
+            message = MIMEText(body)
+            message['to'] = to
+            message['subject'] = subject
+            
+            raw_message = base64.urlsafe_b64encode(message.as_bytes()).decode('utf-8')
+            
+            body_dict = {'raw': raw_message}
+            if thread_id:
+                body_dict['threadId'] = thread_id
+
+            sent_msg = self.service_gmail.users().messages().send(
+                userId='me', body=body_dict
+            ).execute()
+            
+            return f"✅ Email inviata a {to} (ID: {sent_msg['id']})"
+
+        except Exception as e:
+            logger.error(f"Gmail send error: {e}")
+            return f"Errore nell'invio email: {str(e)}"
+
+# Singleton instance for shared use across the application
+try:
+    GOOGLE_CLIENT = GoogleWorkspaceClient()
+except Exception as e:
+    logger.error(f"Failed to initialize global GoogleWorkspaceClient: {e}")
+    GOOGLE_CLIENT = None
+

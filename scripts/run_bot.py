@@ -9,6 +9,13 @@ import logging
 import sys
 import os
 
+# Suppress ultra-chatty internal logs from libraries (DO THIS FIRST)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+logging.getLogger("googleapiclient").setLevel(logging.WARNING)
+logging.getLogger("google").setLevel(logging.WARNING)
+logging.getLogger("telegram").setLevel(logging.INFO)
+
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -59,7 +66,8 @@ async def run_bot():
     # For production, use webhooks instead
     await app.initialize()
     await app.start()
-    await app.updater.start_polling(drop_pending_updates=True)
+    # Increased poll_interval to 2 seconds to reduce "noise" and API frequency
+    await app.updater.start_polling(drop_pending_updates=True, poll_interval=2.0)
     
     logger.info("Bot is running! Press Ctrl+C to stop.")
     
