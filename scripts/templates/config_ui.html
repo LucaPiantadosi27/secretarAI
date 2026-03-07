@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecretarAI - System Configuration</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --surface-color: rgba(30, 41, 59, 0.7);
+            --surface-border: rgba(255, 255, 255, 0.1);
+            --primary-color: #3b82f6;
+            --primary-hover: #2563eb;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --input-bg: rgba(15, 23, 42, 0.6);
+            --input-border: rgba(148, 163, 184, 0.2);
+            --input-focus: #3b82f6;
+            --success: #10b981;
+            --danger: #ef4444;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.15) 0px, transparent 50%);
+            background-attachment: fixed;
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 3rem 1rem;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 900px;
+            animation: fadeIn 0.6s ease-out;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        h1 {
+            font-size: 3rem;
+            font-weight: 700;
+            background: linear-gradient(to right, #60a5fa, #a78bfa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.025em;
+        }
+
+        p.subtitle {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+        }
+
+        .glass-panel {
+            background: var(--surface-color);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--surface-border);
+            border-radius: 1.25rem;
+            padding: 2.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .glass-panel:hover {
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.2), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        .section-title {
+            font-size: 1.35rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--surface-border);
+            color: #e2e8f0;
+        }
+
+        .section-icon {
+            font-size: 1.5rem;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 1.5rem;
+        }
+
+        @media (min-width: 640px) {
+            .form-grid { grid-template-columns: repeat(2, 1fr); }
+            .full-width { grid-column: 1 / -1; }
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        label {
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: var(--text-main);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .help-link {
+            font-size: 0.75rem;
+            color: #93c5fd;
+            text-decoration: none;
+            opacity: 0.8;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+        }
+
+        .help-link:hover {
+            opacity: 1;
+            text-decoration: underline;
+            color: #bfdbfe;
+        }
+
+        input[type="text"],
+        input[type="password"],
+        input[type="number"],
+        select {
+            width: 100%;
+            background: var(--input-bg);
+            border: 1px solid var(--input-border);
+            color: var(--text-main);
+            padding: 0.875rem 1rem;
+            border-radius: 0.5rem;
+            font-family: 'Inter', sans-serif;
+            font-size: 1rem;
+            transition: all 0.2s ease;
+            outline: none;
+            box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.05);
+        }
+
+        input:focus,
+        select:focus {
+            border-color: var(--input-focus);
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25);
+            background: rgba(30, 41, 59, 0.8);
+        }
+
+        /* Standardize select UI */
+        select {
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2394a3b8'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 1rem center;
+            background-size: 1rem;
+            padding-right: 2.5rem;
+        }
+        
+        select option {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+        }
+
+        .checkbox-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            cursor: pointer;
+            padding: 0.5rem 0;
+        }
+
+        input[type="checkbox"] {
+            appearance: none;
+            width: 1.25rem;
+            height: 1.25rem;
+            border: 2px solid var(--input-border);
+            border-radius: 0.25rem;
+            background: var(--input-bg);
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s;
+        }
+
+        input[type="checkbox"]:checked {
+            background: var(--primary-color);
+            border-color: var(--primary-color);
+        }
+
+        input[type="checkbox"]:checked::after {
+            content: '';
+            position: absolute;
+            left: 5px;
+            top: 2px;
+            width: 5px;
+            height: 10px;
+            border: solid white;
+            border-width: 0 2px 2px 0;
+            transform: rotate(45deg);
+        }
+
+        .actions {
+            display: flex;
+            justify-content: center;
+            margin-top: 3rem;
+            margin-bottom: 2rem;
+            position: sticky;
+            bottom: 2rem;
+            z-index: 10;
+        }
+
+        button.save-btn {
+            background: linear-gradient(135deg, var(--primary-color), #4f46e5);
+            color: white;
+            border: none;
+            padding: 1rem 3rem;
+            font-size: 1.125rem;
+            font-weight: 600;
+            border-radius: 9999px;
+            cursor: pointer;
+            box-shadow: 0 10px 15px -3px rgba(59, 130, 246, 0.4), 0 4px 6px -2px rgba(59, 130, 246, 0.2);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            letter-spacing: 0.025em;
+        }
+
+        button.save-btn:hover {
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 20px 25px -5px rgba(59, 130, 246, 0.5), 0 10px 10px -5px rgba(59, 130, 246, 0.3);
+        }
+
+        button.save-btn:active {
+            transform: translateY(0) scale(0.98);
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%) translateY(150px);
+            background: var(--surface-color);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--surface-border);
+            padding: 1rem 2rem;
+            border-radius: 2rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            z-index: 50;
+            font-weight: 500;
+        }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+
+        .toast.success { border-left: 4px solid var(--success); }
+        .toast.error { border-left: 4px solid var(--danger); }
+
+        .loading-spinner {
+            width: 1.25rem;
+            height: 1.25rem;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s linear infinite;
+            display: none;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Utility */
+        .text-xs { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>SecretarAI</h1>
+            <p class="subtitle">System Configuration Dashboard</p>
+        </header>
+
+        <form id="configForm">
+            <!-- LLM Configuration -->
+            <div class="glass-panel">
+                <h2 class="section-title">
+                    <span class="section-icon">🧠</span> Brain & Intelligence (LLM)
+                </h2>
+                <div class="form-grid">
+                    <div class="form-group full-width">
+                        <label for="LLM_PROVIDER">Primary LLM Provider</label>
+                        <select id="LLM_PROVIDER" name="LLM_PROVIDER">
+                            <option value="gemini">Google Gemini (Recommended)</option>
+                            <option value="claude">Anthropic Claude</option>
+                        </select>
+                        <p class="text-xs">Select which AI models will power the core reasoning.</p>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="GEMINI_API_KEY">
+                            Gemini API Key
+                            <a href="https://aistudio.google.com/app/apikey" target="_blank" class="help-link">🚀 Get Key</a>
+                        </label>
+                        <input type="password" id="GEMINI_API_KEY" name="GEMINI_API_KEY" placeholder="AIzaSy...">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="ANTHROPIC_API_KEY">
+                            Anthropic API Key
+                            <a href="https://console.anthropic.com/settings/keys" target="_blank" class="help-link">🚀 Get Key</a>
+                        </label>
+                        <input type="password" id="ANTHROPIC_API_KEY" name="ANTHROPIC_API_KEY" placeholder="sk-ant-...">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Telegram -->
+            <div class="glass-panel">
+                <h2 class="section-title">
+                    <span class="section-icon">🤖</span> Telegram Interface
+                </h2>
+                <div class="form-grid">
+                    <div class="form-group full-width">
+                        <label for="TELEGRAM_BOT_TOKEN">
+                            Telegram Bot Token
+                            <a href="https://t.me/BotFather" target="_blank" class="help-link">💬 Open @BotFather</a>
+                        </label>
+                        <input type="password" id="TELEGRAM_BOT_TOKEN" name="TELEGRAM_BOT_TOKEN" placeholder="1234567890:AAH...">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="ALLOWED_USER_IDS">Allowed User IDs</label>
+                        <input type="text" id="ALLOWED_USER_IDS" name="ALLOWED_USER_IDS" placeholder="123456,789012">
+                        <p class="text-xs">Comma-separated Telegram user IDs of the admins.</p>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="TELEGRAM_WEBHOOK_URL">
+                            Webhook URL (Optional)
+                        </label>
+                        <input type="text" id="TELEGRAM_WEBHOOK_URL" name="TELEGRAM_WEBHOOK_URL" placeholder="https://your-domain.com/webhook">
+                        <p class="text-xs">Leave empty to use Polling mode (recommended for local use).</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Google Workspace -->
+            <div class="glass-panel">
+                <h2 class="section-title">
+                    <span class="section-icon">📅</span> Google Workspace (Calendar & Emails)
+                </h2>
+                <div class="form-grid">
+                    <div class="form-group full-width">
+                        <label for="GOOGLE_CLIENT_ID">
+                            Google Client ID
+                            <a href="https://console.cloud.google.com/apis/credentials" target="_blank" class="help-link">🔑 Google Console</a>
+                        </label>
+                        <input type="text" id="GOOGLE_CLIENT_ID" name="GOOGLE_CLIENT_ID" placeholder="...apps.googleusercontent.com">
+                    </div>
+                    
+                    <div class="form-group full-width">
+                        <label for="GOOGLE_CLIENT_SECRET">Google Client Secret</label>
+                        <input type="password" id="GOOGLE_CLIENT_SECRET" name="GOOGLE_CLIENT_SECRET" placeholder="GOCSPX-...">
+                    </div>
+
+                    <div class="form-group full-width">
+                        <label for="GOOGLE_REDIRECT_URI">OAuth Redirect URI</label>
+                        <input type="text" id="GOOGLE_REDIRECT_URI" name="GOOGLE_REDIRECT_URI" placeholder="http://localhost:8080/oauth/callback">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Voice Transcription -->
+            <div class="glass-panel">
+                <h2 class="section-title">
+                    <span class="section-icon">🎙️</span> Voice Processing
+                </h2>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="VOICE_PROVIDER">Voice Transcription Engine</label>
+                        <select id="VOICE_PROVIDER" name="VOICE_PROVIDER">
+                            <option value="whisper">OpenAI Whisper</option>
+                            <option value="gemini">Google Gemini Native Audio</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="OPENAI_API_KEY">
+                            OpenAI API Key (for Whisper)
+                            <a href="https://platform.openai.com/api-keys" target="_blank" class="help-link">🚀 Get Key</a>
+                        </label>
+                        <input type="password" id="OPENAI_API_KEY" name="OPENAI_API_KEY" placeholder="sk-...">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Core Settings -->
+            <div class="glass-panel">
+                <h2 class="section-title">
+                    <span class="section-icon">⚙️</span> Core Systems & External
+                </h2>
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="DATABASE_URL">Database Connection URL</label>
+                        <input type="text" id="DATABASE_URL" name="DATABASE_URL" placeholder="sqlite+aiosqlite:///./secretarai.db">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="DEFAULT_GEOFENCE_RADIUS_METERS">Default Geofence Radius (meters)</label>
+                        <input type="number" id="DEFAULT_GEOFENCE_RADIUS_METERS" name="DEFAULT_GEOFENCE_RADIUS_METERS" placeholder="100">
+                    </div>
+
+                    <div class="form-group full-width">
+                        <label class="checkbox-wrapper">
+                            <input type="checkbox" id="PC_AUTOMATION_ENABLED" name="PC_AUTOMATION_ENABLED">
+                            <span style="font-weight: 500;">Enable PC Automation Modules</span>
+                        </label>
+                        <p class="text-xs" style="margin-left: 2rem;">Allows the AI to automate your local desktop.</p>
+                    </div>
+
+                    <div class="form-group full-width" id="pcModeGroup">
+                        <label for="PC_AUTOMATION_MODE">PC Automation Engine</label>
+                        <select id="PC_AUTOMATION_MODE" name="PC_AUTOMATION_MODE">
+                            <option value="pyautogui">PyAutoGUI (Local Native)</option>
+                            <option value="claude_computer_use">Claude Computer Use (Anthropic Beta)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="actions">
+                <button type="button" class="save-btn" onclick="saveConfiguration()">
+                    <span class="btn-text">Save & Overwrite Configuration</span>
+                    <div class="loading-spinner"></div>
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">
+        <span id="toastIcon">✓</span>
+        <span id="toastMessage">Configuration saved successfully!</span>
+    </div>
+
+    <script>
+        // Load existing configuration on page load
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const response = await fetch('/api/config');
+                if (!response.ok) throw new Error("Failed to load configuration");
+                
+                const data = await response.json();
+                
+                // Populate fields dynamically
+                Object.keys(data).forEach(key => {
+                    const el = document.getElementById(key);
+                    if (el) {
+                        const val = data[key];
+                        // Remove potential enclosing quotes mapping string from .env
+                        const cleanVal = (val && typeof val === 'string' && val.startsWith('"') && val.endsWith('"')) 
+                            ? val.replace(/^"|"$/g, '') 
+                            : val;
+
+                        if (el.type === 'checkbox') {
+                            el.checked = (cleanVal.toLowerCase() === 'true' || cleanVal == '1');
+                        } else {
+                            el.value = cleanVal;
+                        }
+                    }
+                });
+
+                // Trigger change event to setup conditional UI
+                const pcAutomationCheckbox = document.getElementById('PC_AUTOMATION_ENABLED');
+                if(pcAutomationCheckbox) {
+                    pcAutomationCheckbox.addEventListener('change', togglePcMode);
+                    togglePcMode.call(pcAutomationCheckbox);
+                }
+
+            } catch (error) {
+                showToast("Failed to connect to backend server.", "error");
+                console.error(error);
+            }
+        });
+
+        function togglePcMode() {
+            const group = document.getElementById('pcModeGroup');
+            if (this.checked) {
+                group.style.display = 'flex';
+                group.style.animation = 'fadeIn 0.3s ease-out';
+            } else {
+                group.style.display = 'none';
+            }
+        }
+
+        async function saveConfiguration() {
+            const form = document.getElementById('configForm');
+            const data = {};
+            const formData = new FormData(form);
+            
+            // Extract all inputs
+            const inputs = form.querySelectorAll('input, select');
+            inputs.forEach(input => {
+                const name = input.name;
+                if (!name) return;
+                
+                if (input.type === 'checkbox') {
+                    data[name] = input.checked;
+                } else if (input.type === 'number') {
+                    data[name] = input.value ? Number(input.value) : '';
+                } else {
+                    data[name] = input.value.trim();
+                }
+            });
+
+            // Toggle UI state
+            const btn = document.querySelector('.save-btn');
+            const spinner = btn.querySelector('.loading-spinner');
+            const btnText = btn.querySelector('.btn-text');
+            
+            btn.disabled = true;
+            spinner.style.display = 'block';
+            btnText.style.opacity = '0.5';
+
+            try {
+                const response = await fetch('/api/config', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showToast(result.message || "Configuration saved successfully!", "success");
+                } else {
+                    showToast(result.message || "An error occurred.", "error");
+                }
+            } catch (error) {
+                showToast("Failed to connect to server.", "error");
+                console.error(error);
+            } finally {
+                // Restore UI state
+                setTimeout(() => {
+                    btn.disabled = false;
+                    spinner.style.display = 'none';
+                    btnText.style.opacity = '1';
+                }, 500);
+            }
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            const toastIcon = document.getElementById('toastIcon');
+            const toastMessage = document.getElementById('toastMessage');
+
+            toastMessage.textContent = message;
+            
+            if (type === 'success') {
+                toast.className = 'toast show success';
+                toastIcon.textContent = '✓';
+                toastIcon.style.color = 'var(--success)';
+            } else {
+                toast.className = 'toast show error';
+                toastIcon.textContent = '⚠️';
+                toastIcon.style.color = 'var(--danger)';
+            }
+
+            // Hide after 3 seconds
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
